@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vai Chover?</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #6b7280, #1e3a8a);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .card { background: rgba(255, 255, 255, 0.95); color: #333; }
+        .weather-icon { width: 50px; height: 50px; }
+        #map { height: 400px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">Vai Chover? 🌦️</h1>
+        
+        <!-- Formulário para cidade e horário -->
+        <form method="POST" class="mb-4">
+            <div class="input-group mb-3">
+                <input type="text" name="city" class="form-control" placeholder="Digite a cidade" value="{{ city }}">
+                <button type="submit" class="btn btn-primary">Buscar</button>
+            </div>
+            <div class="input-group mb-3">
+                <input type="datetime-local" name="datetime" class="form-control" placeholder="Selecione data e hora">
+            </div>
+        </form>
+
+        <!-- Dados do sensor -->
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="card p-3">
+                    <h3>Dados do Sensor (Local)</h3>
+                    <p><strong>Temperatura:</strong> {{ sensor_data.temperature }} °C</p>
+                    <p><strong>Umidade:</strong> {{ sensor_data.humidity }} %</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card p-3">
+                    <h3>Condições Climáticas ({{ city }})</h3>
+                    {% for condition, alert_type in conditions %}
+                        <div class="alert alert-{{ alert_type }} mb-2" role="alert">
+                            {{ condition }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card p-3">
+                    <h3>Precipitação (NASA GPM)</h3>
+                    <p><strong>Taxa de precipitação:</strong> {{ precip_rate | default(0) }} mm/h</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gráfico de previsão -->
+        <div class="card p-3 mb-4">
+            <h3>Previsão para {{ city }} (5 dias)</h3>
+            <canvas id="weatherChart"></canvas>
+        </div>
+
+        <!-- Gráfico de probabilidades -->
+        <div class="card p-3 mb-4">
+            <h3>Probabilidades de Condições Adversas</h3>
+            <canvas id="probChart"></canvas>
+        </div>
+
+        <!-- Mapa interativo -->
+        <div class="card p-3 mb-4">
+            <h3>Mapa de Precipitação ({{ city }})</h3>
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <script>
+        // Gráfico de temperatura
+        const ctx = document.getElementById("weatherChart").getContext("2d");
+        new Chart(ctx, {
+            type: "line",
+            data: {
+                labels: {{ weather_data.labels | tojson }},
+                datasets: [{
+                    label: "Temperatura (°C)",
+                    data: {{ weather_data.temps | tojson }},
+                    borderColor: "#007bff",
+                    fill: false
+                }]
+            },
+            options: {
+                scales: { y: { beginAtZero: false } },
+                plugins: {
+                    legend: { display: true },
+                    tooltip: {
+                        callbacks: {
+                            afterLabel: function(context) {
+                                return "Ícone: " + {{ weather_data.icons | tojson }}[context.dataIndex];
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Gráfico de probabilidades
+        const probCtx = document.getElementById("probChart").getContext("2d");
+        new Chart(probCtx, {
+            type: "bar",
+            data: {
+                labels: ["Muito quente", "Muito fria", "Muito úmida", "Muito ventosa", "Muita chuva", "Muito desconfortável"],
+                datasets: [{
+                    label: "Probabilidade (%)",
+                    data: [
+                        {{ probs.hot }},
+                        {{ probs.cold }},
+                        {{ probs.humid }},
+                        {{ probs.windy }},
+                        {{ probs.rain }},
+                        {{ probs.uncomfortable }}
+                    ],
+                    backgroundColor: ["#dc3545", "#0dcaf0", "#ffc107", "#6c757d", "#0d6efd", "#212529"]
+                }]
+            },
+            options: {
+                scales: { y: { beginAtZero: true, max: 100 } },
+                plugins: { legend: { display: true } }
+            }
+        });
+
+        // Mapa interativo com Leaflet.js
+        var map = L.map('map').setView([{{ lat | default(0) }}, {{ lon | default(0) }}], 10);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        L.marker([{{ lat | default(0) }}, {{ lon | default(0) }}]).addTo(map)
+            .bindPopup('{{ city }}: {{ precip_rate | default(0) }} mm/h')
+            .openPopup();
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
